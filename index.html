@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jaaragenda</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f8f6;color:#1a1a1a;padding:1.5rem}
+h1{font-size:1.4rem;font-weight:500;margin-bottom:1.5rem;color:#1a1a1a}
+#controls{display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap}
+#year-label{font-size:22px;font-weight:500;min-width:60px}
+.btn{background:transparent;border:1px solid #ccc;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;color:#1a1a1a;font-family:inherit}
+.btn:hover{background:#efefef}
+.btn.accent{border-color:#378add;color:#185fa5}
+.btn.accent:hover{background:#e6f1fb}
+#legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:#666}
+.legend-dot{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+#io-bar{display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap}
+#import-file{display:none}
+#data-info{font-size:12px;color:#888}
+#grid-wrap{overflow-x:auto;margin-bottom:1rem}
+table{border-collapse:collapse;font-size:11px;width:100%;table-layout:fixed}
+thead th{color:#888;font-weight:400;text-align:center;padding:2px 1px}
+thead th.month-head{text-align:left;width:88px;min-width:88px;padding-left:4px;font-size:12px;color:#1a1a1a;font-weight:500}
+tbody td.month-name{font-size:12px;color:#1a1a1a;font-weight:500;padding:2px 4px;vertical-align:middle;width:88px;min-width:88px}
+.day-cell{text-align:center;vertical-align:middle;cursor:pointer;border-radius:3px;position:relative;border:0.5px solid transparent;height:26px}
+.day-cell:hover{border-color:#999}
+.day-cell.weekend{background:#1a1a1a}
+.day-cell.weekend span{color:#fff}
+.day-cell.today{border:1.5px solid #378add !important}
+.day-cell span{font-size:10px;line-height:26px;display:block;pointer-events:none;color:#888}
+.day-cell.colored span{color:#fff;text-shadow:0 0 3px rgba(0,0,0,0.4)}
+.day-cell.colored.light-color span{color:#1a1a1a;text-shadow:none}
+.day-cell.has-note::after{content:'';position:absolute;top:2px;right:2px;width:4px;height:4px;border-radius:50%;background:#fff;opacity:0.8}
+.day-cell.weekend.has-note::after{background:#aaa}
+.day-cell.empty{cursor:default}
+.day-cell.selected-cell{border:2px solid #378add !important}
+#picker-panel{display:none;background:#fff;border:1px solid #ddd;border-radius:10px;padding:16px;margin-bottom:1rem}
+#picker-panel.open{display:block}
+#picker-title{font-size:13px;font-weight:500;margin-bottom:12px;color:#555}
+#color-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.color-swatch{width:28px;height:28px;border-radius:4px;cursor:pointer;border:2px solid transparent;flex-shrink:0}
+.color-swatch:hover{transform:scale(1.15)}
+.color-swatch.selected{border-color:#1a1a1a}
+#note-input{width:100%;border:1px solid #ddd;border-radius:8px;padding:6px 8px;font-size:13px;font-family:inherit;resize:none;background:#fff;color:#1a1a1a;margin-bottom:10px}
+#picker-btns{display:flex;gap:8px}
+#picker-btns button{font-size:13px;padding:6px 18px}
+#clear-btn{color:#c0392b;border-color:#f1948a}
+#tooltip{position:fixed;background:#fff;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:12px;pointer-events:none;display:none;z-index:999;max-width:200px;color:#1a1a1a}
+#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#333;color:#fff;border-radius:8px;padding:8px 18px;font-size:13px;display:none;z-index:2000}
+</style>
+</head>
+<body>
+
+<h1>Jaaragenda</h1>
+
+<div id="controls">
+  <button class="btn" id="prev-yr">&#8592;</button>
+  <span id="year-label"></span>
+  <button class="btn" id="next-yr">&#8594;</button>
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1a1a1a"></div>weekend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4a90d9"></div>ingepland</div>
+  </div>
+</div>
+
+<div id="io-bar">
+  <button class="btn accent" id="export-btn">&#8659; exporteer alle jaren</button>
+  <button class="btn" id="import-btn">&#8657; importeer backup</button>
+  <input type="file" id="import-file" accept=".json">
+  <span id="data-info"></span>
+</div>
+
+<div id="picker-panel">
+  <div id="picker-title"></div>
+  <div id="color-grid"></div>
+  <textarea id="note-input" rows="2" placeholder="notitie (optioneel)"></textarea>
+  <div id="picker-btns">
+    <button class="btn" id="clear-btn">wis dag</button>
+    <button class="btn accent" id="save-btn">opslaan</button>
+    <button class="btn" id="cancel-btn">annuleer</button>
+  </div>
+</div>
+
+<div id="grid-wrap"></div>
+
+<div id="tooltip"></div>
+<div id="toast"></div>
+
+<script>
+var COLORS=['#4a90d9','#2ecc71','#e74c3c','#f39c12','#9b59b6','#1abc9c','#e67e22','#3498db','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b','#795548','#ffc107','#673ab7','#009688','#f06292','#aed6f1','#a9dfbf','#f1948a','#f8c471','#c39bd3','#76d7c4','#f0e68c','#d3d3d3','#ffb347','#b0c4de','#98fb98','#dda0dd','#87ceeb','#f4a460','#20b2aa','#ff6347','#6495ed','#da70d6','#3d9970','#ff851b','#0074d9','#85144b','#39cccc','#01ff70','#ffdc00','#7fdbff','#f012be','#b10dc9','#aaaaaa','#dddddd','#ffffff','#111111','#2c3e50','#c0392b','#27ae60','#8e44ad'];
+var LIGHT_COLORS={'#f0e68c':1,'#d3d3d3':1,'#aed6f1':1,'#a9dfbf':1,'#f8c471':1,'#76d7c4':1,'#f1948a':1,'#c39bd3':1,'#b0c4de':1,'#ffb347':1,'#87ceeb':1,'#98fb98':1,'#dda0dd':1,'#f4a460':1,'#aaaaaa':1,'#dddddd':1,'#ffffff':1,'#7fdbff':1,'#ffdc00':1,'#01ff70':1};
+var MONTHS_NL=['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
+var TODAY=new Date();
+var currentYear=TODAY.getFullYear();
+var data={};
+var pickerTarget=null;
+var selectedColor=COLORS[0];
+
+function daysInMonth(y,m){return new Date(y,m+1,0).getDate();}
+function isWeekend(y,m,d){var w=new Date(y,m,d).getDay();return w===0||w===6;}
+function storageKey(y){return 'yc_'+y;}
+function loadYear(y){try{var r=localStorage.getItem(storageKey(y));return r?JSON.parse(r):{};}catch(e){return {};}}
+function saveYear(y,d){try{localStorage.setItem(storageKey(y),JSON.stringify(d));}catch(e){}}
+function dayKey(m,d){return m+'-'+d;}
+
+function getAllStoredYears(){
+  var years={};
+  for(var k in localStorage){
+    if(k.indexOf('yc_')===0){
+      var y=k.slice(3);
+      try{years[y]=JSON.parse(localStorage.getItem(k));}catch(e){}
+    }
+  }
+  return years;
+}
+
+function updateDataInfo(){
+  var all=getAllStoredYears();
+  var total=0;
+  for(var y in all) total+=Object.keys(all[y]).length;
+  document.getElementById('data-info').textContent=total>0?total+' dagen opgeslagen':'';
+}
+
+function showToast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.display='block';
+  setTimeout(function(){t.style.display='none';},2200);
+}
+
+function render(){
+  document.getElementById('year-label').textContent=currentYear;
+  data=loadYear(currentYear);
+  updateDataInfo();
+  var wrap=document.getElementById('grid-wrap');
+  var html='<table><thead><tr><th class="month-head"></th>';
+  for(var d=1;d<=31;d++) html+='<th>'+d+'</th>';
+  html+='</tr></thead><tbody>';
+  for(var m=0;m<12;m++){
+    var days=daysInMonth(currentYear,m);
+    html+='<tr><td class="month-name">'+MONTHS_NL[m]+'</td>';
+    for(var d2=1;d2<=31;d2++){
+      if(d2>days){html+='<td class="day-cell empty"></td>';continue;}
+      var k=dayKey(m,d2);
+      var entry=data[k]||{};
+      var we=isWeekend(currentYear,m,d2);
+      var isToday=currentYear===TODAY.getFullYear()&&m===TODAY.getMonth()&&d2===TODAY.getDate();
+      var isPicked=pickerTarget&&pickerTarget.m===m&&pickerTarget.d===d2;
+      var cls='day-cell';
+      var style='';
+      if(we) cls+=' weekend';
+      if(entry.color&&!we){cls+=' colored';style='background:'+entry.color+';';if(LIGHT_COLORS[entry.color])cls+=' light-color';}
+      if(entry.note) cls+=' has-note';
+      if(isToday) cls+=' today';
+      if(isPicked) cls+=' selected-cell';
+      html+='<td class="'+cls+'" style="'+style+'" data-m="'+m+'" data-d="'+d2+'"><span>'+d2+'</span></td>';
+    }
+    html+='</tr>';
+  }
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+  var cells=wrap.querySelectorAll('.day-cell:not(.empty)');
+  for(var i=0;i<cells.length;i++){
+    cells[i].addEventListener('click',onCellClick);
+    cells[i].addEventListener('mouseenter',onCellHover);
+    cells[i].addEventListener('mouseleave',hideTooltip);
+  }
+}
+
+function onCellHover(e){
+  var m=parseInt(e.currentTarget.getAttribute('data-m'));
+  var d=parseInt(e.currentTarget.getAttribute('data-d'));
+  var entry=data[dayKey(m,d)]||{};
+  if(!entry.note&&!entry.color){hideTooltip();return;}
+  var tip=document.getElementById('tooltip');
+  var html='<strong>'+d+' '+MONTHS_NL[m]+'</strong>';
+  if(entry.note) html+='<br>'+entry.note;
+  tip.innerHTML=html;
+  tip.style.display='block';
+  var r=e.currentTarget.getBoundingClientRect();
+  tip.style.left=(r.left+window.scrollX)+'px';
+  tip.style.top=(r.bottom+window.scrollY+4)+'px';
+}
+function hideTooltip(){document.getElementById('tooltip').style.display='none';}
+
+function onCellClick(e){
+  var cell=e.currentTarget;
+  var m=parseInt(cell.getAttribute('data-m'));
+  var d=parseInt(cell.getAttribute('data-d'));
+  if(pickerTarget&&pickerTarget.m===m&&pickerTarget.d===d){
+    closePicker();
+    return;
+  }
+  pickerTarget={m:m,d:d};
+  var entry=data[dayKey(m,d)]||{};
+  document.getElementById('note-input').value=entry.note||'';
+  selectedColor=entry.color||COLORS[0];
+  document.getElementById('picker-title').textContent=d+' '+MONTHS_NL[m];
+  renderColorGrid();
+  document.getElementById('picker-panel').className='open';
+  render();
+}
+
+function renderColorGrid(){
+  var grid=document.getElementById('color-grid');
+  grid.innerHTML='';
+  for(var i=0;i<COLORS.length;i++){
+    (function(c){
+      var div=document.createElement('div');
+      div.className='color-swatch'+(c===selectedColor?' selected':'');
+      div.style.background=c;
+      div.addEventListener('click',function(e){
+        e.stopPropagation();
+        selectedColor=c;
+        renderColorGrid();
+      });
+      grid.appendChild(div);
+    })(COLORS[i]);
+  }
+}
+
+document.getElementById('save-btn').addEventListener('click',function(){
+  if(!pickerTarget) return;
+  var k=dayKey(pickerTarget.m,pickerTarget.d);
+  var note=document.getElementById('note-input').value.trim();
+  data[k]={color:selectedColor,note:note};
+  saveYear(currentYear,data);
+  closePicker();
+  render();
+});
+
+document.getElementById('clear-btn').addEventListener('click',function(){
+  if(!pickerTarget) return;
+  delete data[dayKey(pickerTarget.m,pickerTarget.d)];
+  saveYear(currentYear,data);
+  closePicker();
+  render();
+});
+
+document.getElementById('cancel-btn').addEventListener('click',function(){
+  closePicker();
+});
+
+function closePicker(){
+  pickerTarget=null;
+  document.getElementById('picker-panel').className='';
+  render();
+}
+
+document.getElementById('prev-yr').addEventListener('click',function(){currentYear--;closePicker();render();});
+document.getElementById('next-yr').addEventListener('click',function(){currentYear++;closePicker();render();});
+
+document.getElementById('export-btn').addEventListener('click',function(){
+  var all=getAllStoredYears();
+  var blob=new Blob([JSON.stringify({versie:1,export:new Date().toISOString().slice(0,10),jaren:all},null,2)],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='jaaragenda_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  showToast('Backup gedownload');
+});
+
+document.getElementById('import-btn').addEventListener('click',function(){
+  document.getElementById('import-file').click();
+});
+
+document.getElementById('import-file').addEventListener('change',function(e){
+  var file=e.target.files[0];
+  if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      var parsed=JSON.parse(ev.target.result);
+      var jaren=parsed.jaren||parsed;
+      var count=0;
+      for(var y in jaren){
+        localStorage.setItem(storageKey(y),JSON.stringify(jaren[y]));
+        count+=Object.keys(jaren[y]).length;
+      }
+      data=loadYear(currentYear);
+      render();
+      showToast('Geimporteerd: '+count+' dagen');
+    }catch(err){
+      showToast('Fout: bestand niet herkend');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+renderColorGrid();
+render();
+</script>
+</body>
+</html>
